@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Atlas AWS Emulator — Demo</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #141b2d;
+      --border: #243049;
+      --text: #e8eefc;
+      --muted: #93a4c7;
+      --accent: #5b8cff;
+      --ok: #3dd68c;
+      --warn: #f5c451;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      background: radial-gradient(circle at top, #172038, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 64px; }
+    header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 28px; }
+    h1 { margin: 0 0 8px; font-size: 2rem; }
+    .subtitle { color: var(--muted); margin: 0; }
+    .badge {
+      background: rgba(91, 140, 255, 0.15);
+      border: 1px solid rgba(91, 140, 255, 0.35);
+      color: #b9ccff;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      white-space: nowrap;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .card h2 { margin: 0 0 10px; font-size: 1.05rem; }
+    .card p { margin: 0 0 12px; color: var(--muted); line-height: 1.5; font-size: 0.95rem; }
+    .status { font-weight: 600; }
+    .status.ok { color: var(--ok); }
+    .status.bad { color: #ff7b7b; }
+    pre, code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+    }
+    pre {
+      background: #0a0f1a;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      overflow: auto;
+      margin: 0;
+      white-space: pre-wrap;
+    }
+    button {
+      background: var(--accent);
+      color: white;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    ul { margin: 0; padding-left: 18px; color: var(--muted); line-height: 1.7; }
+    .demo-services li strong { color: var(--text); }
+    .footer { margin-top: 24px; color: var(--muted); font-size: 0.9rem; }
+    a { color: #9db7ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Atlas AWS Emulator</h1>
+        <p class="subtitle">Local AWS endpoint for manager demos — S3, DynamoDB, Lambda, EC2, API Gateway, ECS, EKS, IAM.</p>
+      </div>
+      <div class="badge" id="version">Loading…</div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Emulator status</h2>
+        <p id="health-line" class="status">Checking <code>/_atlas/health</code>…</p>
+        <p id="service-count"></p>
+        <button id="refresh-btn" type="button">Refresh status</button>
+      </section>
+
+      <section class="card">
+        <h2>8 services to demo</h2>
+        <ul class="demo-services">
+          <li><strong>Lambda</strong> — real Docker runtime + event sources</li>
+          <li><strong>DynamoDB</strong> — query engine + streams</li>
+          <li><strong>S3</strong> — presigned URLs, S3 Select</li>
+          <li><strong>EC2</strong> — container-backed instances + IMDS</li>
+          <li><strong>API Gateway</strong> — VTL routing into services</li>
+          <li><strong>ECS</strong> — container lifecycle</li>
+          <li><strong>EKS</strong> — live k3s API per cluster</li>
+          <li><strong>IAM</strong> — SigV4 auth layer</li>
+        </ul>
+      </section>
+
+      <section class="card" style="grid-column: 1 / -1;">
+        <h2>AWS CLI smoke commands</h2>
+        <pre id="cli-block">export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
+EP="--endpoint-url http://localhost:4566"
+
+aws $EP s3api list-buckets
+aws $EP dynamodb list-tables
+aws $EP iam list-users
+aws $EP ec2 describe-instances
+aws $EP lambda list-functions
+aws $EP ecs list-clusters
+aws $EP eks list-clusters
+aws $EP apigateway get-rest-apis</pre>
+      </section>
+    </div>
+
+    <p class="footer">
+      Root URL (<code>/</code>) returns S3 XML by design — use this page or the AWS CLI.
+      JSON health: <a href="/_atlas/health">/_atlas/health</a> ·
+      <a href="/health">/health</a>
+    </p>
+  </div>
+
+  <script>
+    async function loadStatus() {
+      const healthLine = document.getElementById('health-line');
+      const serviceCount = document.getElementById('service-count');
+      const version = document.getElementById('version');
+      const btn = document.getElementById('refresh-btn');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/_atlas/health');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const services = data.services || {};
+        const running = Object.values(services).filter(v => v === 'running').length;
+        healthLine.textContent = 'Emulator is running';
+        healthLine.className = 'status ok';
+        serviceCount.textContent = running + ' services running · edition ' + (data.edition || 'community');
+        version.textContent = 'v' + (data.version || 'dev');
+      } catch (e) {
+        healthLine.textContent = 'Emulator not reachable: ' + e.message;
+        healthLine.className = 'status bad';
+        serviceCount.textContent = '';
+        version.textContent = 'offline';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    document.getElementById('refresh-btn').addEventListener('click', loadStatus);
+    loadStatus();
+  </script>
+</body>
+</html>
