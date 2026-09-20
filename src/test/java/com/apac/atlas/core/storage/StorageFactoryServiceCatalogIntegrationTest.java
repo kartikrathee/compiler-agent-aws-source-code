@@ -1,0 +1,43 @@
+package com.apac.atlas.core.storage;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.QuarkusTestProfile;
+import io.quarkus.test.junit.TestProfile;
+import jakarta.inject.Inject;
+import org.junit.jupiter.api.Test;
+
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@QuarkusTest
+@TestProfile(StorageFactoryServiceCatalogIntegrationTest.AcmPersistentStorageProfile.class)
+class StorageFactoryServiceCatalogIntegrationTest {
+
+    @Inject
+    StorageFactory storageFactory;
+
+    @Test
+    void acmStorageOverrideIsApplied() {
+        StorageBackend<String, String> backend = storageFactory.create(
+                "acm",
+                "acm-test.json",
+                new TypeReference<Map<String, String>>() {}
+        );
+
+        assertInstanceOf(AccountAwareStorageBackend.class, backend);
+    }
+
+    public static final class AcmPersistentStorageProfile implements QuarkusTestProfile {
+        @Override
+        public Map<String, String> getConfigOverrides() {
+            return Map.of(
+                    "atlas.storage.mode", "memory",
+                    "atlas.storage.services.acm.mode", "persistent",
+                    "atlas.storage.persistent-path", "/tmp/atlas-service-registry-unification-tests"
+            );
+        }
+    }
+}
